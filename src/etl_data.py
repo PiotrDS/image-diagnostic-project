@@ -43,7 +43,7 @@ def standardize(img, eps=1e-8):
 
 class spine_dataset(Dataset):
     
-    def __init__(self):
+    def __init__(self, if_trasform=True):
         self.samples_img = []
         self.samples_mask = []
         self.augmented = []
@@ -53,11 +53,12 @@ class spine_dataset(Dataset):
         path_1_images = f"..{os.sep}data{os.sep}data_1{os.sep}images"
         path_1_masks = f"..{os.sep}data{os.sep}data_1{os.sep}masks"
 
-        transform = A.Compose([
-                        A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=1.0),
-                        A.GaussNoise(p=0.2),
-                        A.ElasticTransform(alpha=1, sigma=50, p=0.3)
-        ], additional_targets={'mask': 'mask'})
+        if if_trasform:
+            transform = A.Compose([
+                            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=1.0),
+                            A.GaussNoise(p=0.2),
+                            A.ElasticTransform(alpha=1, sigma=50, p=0.3)
+            ], additional_targets={'mask': 'mask'})
 
         for image, mask in zip(sorted(os.listdir(path_1_images)), sorted(os.listdir(path_1_masks))):
             full_image_path = os.path.join(path_1_images, image)
@@ -70,11 +71,12 @@ class spine_dataset(Dataset):
                 self.samples_mask.append(mask)
                 self.augmented.append(False)
 
-                for _ in range(8):
-                    try:
-                        augmented_img_mask = transform(image=img, mask=mask)
-                    except Exception as e:
-                        continue
+                if if_trasform:
+                    for _ in range(8):
+                        try:
+                            augmented_img_mask = transform(image=img, mask=mask)
+                        except Exception as e:
+                            continue
                         
                     aug_img = augmented_img_mask["image"]
                     aug_mask = augmented_img_mask["mask"]
@@ -103,11 +105,12 @@ class spine_dataset(Dataset):
                 self.samples_mask.append(mask)
                 self.augmented.append(False)
 
-                for _ in range(5):
-                    try:
-                        augmented_img_mask = transform(image=img, mask=mask)
-                    except Exception as e:
-                        continue
+                if if_trasform:
+                    for _ in range(5):
+                        try:
+                            augmented_img_mask = transform(image=img, mask=mask)
+                        except Exception as e:
+                            continue
 
                     aug_img = augmented_img_mask["image"]
                     aug_mask = augmented_img_mask["mask"]
