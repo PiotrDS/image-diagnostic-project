@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import nibabel as nib
 import SimpleITK as sitk
 from torch.utils.data import Dataset
 import torch
@@ -18,8 +17,8 @@ def load_img_and_mask(img_path, mask_path, des_size):
     mask = sitk.DICOMOrient(mask, "RAS")
     mask = sitk.GetArrayFromImage(mask)
                 
-    img = cv2.resize(img, dsize =des_size, interpolation=cv2.INTER_CUBIC )
-    mask = cv2.resize(mask, dsize =des_size, interpolation=cv2.INTER_CUBIC )
+    img = cv2.resize(img, dsize =des_size, interpolation=cv2.INTER_CUBIC)
+    mask = cv2.resize(mask, dsize =des_size, interpolation=cv2.INTER_CUBIC)
 
     z = img.shape[2] // 2
 
