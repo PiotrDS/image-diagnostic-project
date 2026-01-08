@@ -59,7 +59,7 @@ class spine_dataset(Dataset):
                         A.ElasticTransform(alpha=1, sigma=50, p=0.3)
         ], additional_targets={'mask': 'mask'})
 
-        for image, mask in zip(sorted(os.listdir(path_1_images))[:15], sorted(os.listdir(path_1_masks))[:15]):
+        for image, mask in zip(sorted(os.listdir(path_1_images)), sorted(os.listdir(path_1_masks))):
             full_image_path = os.path.join(path_1_images, image)
             full_mask_path = os.path.join(path_1_masks, mask)
 
@@ -89,7 +89,7 @@ class spine_dataset(Dataset):
             
         path_2 = f"..{os.sep}data{os.sep}data_2"
 
-        for el in sorted(os.listdir(path_2))[:15]:
+        for el in sorted(os.listdir(path_2)):
             full_path = os.path.join(path_2, el)
 
             full_image_path = os.path.join(full_path, f"{el}_sagittal_image.nii.gz")
