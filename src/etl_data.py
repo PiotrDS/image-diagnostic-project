@@ -77,12 +77,12 @@ class spine_dataset(Dataset):
                         except Exception as e:
                             continue
                         
-                    aug_img = augmented_img_mask["image"]
-                    aug_mask = augmented_img_mask["mask"]
-                        
-                    self.samples_img.append(aug_img)
-                    self.samples_mask.append(aug_mask)
-                    self.augmented.append(True)
+                        aug_img = augmented_img_mask["image"]
+                        aug_mask = augmented_img_mask["mask"]
+                            
+                        self.samples_img.append(aug_img)
+                        self.samples_mask.append(aug_mask)
+                        self.augmented.append(True)
 
             except Exception as e:
                 print(e)
@@ -111,12 +111,12 @@ class spine_dataset(Dataset):
                         except Exception as e:
                             continue
 
-                    aug_img = augmented_img_mask["image"]
-                    aug_mask = augmented_img_mask["mask"]
+                        aug_img = augmented_img_mask["image"]
+                        aug_mask = augmented_img_mask["mask"]
                         
-                    self.samples_img.append(aug_img)
-                    self.samples_mask.append(aug_mask)
-                    self.augmented.append(True)
+                        self.samples_img.append(aug_img)
+                        self.samples_mask.append(aug_mask)
+                        self.augmented.append(True)
 
             except Exception as e:
                 
