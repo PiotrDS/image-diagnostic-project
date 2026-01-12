@@ -262,3 +262,5 @@ class HuggingFaceBeit(nn.Module):
             align_corners=False
         )
         return logits
+    
+
