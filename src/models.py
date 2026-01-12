@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers import SegformerForSemanticSegmentation, UperNetForSemanticSegmentation, BeitForSemanticSegmentation
 
 class HybridLoss(nn.Module):
     """
@@ -167,3 +168,97 @@ class ImprovedAttentionUNet(nn.Module):
 
         output = self.conv_final(d2)
         return output
+    
+
+class HuggingFaceSegFormer(nn.Module):
+    def __init__(self, num_classes=4, model_name="nvidia/mit-b0"):
+        super().__init__()
+        # Pobieramy pretrenowany model (np. mit-b0 to wersja najlżejsza)
+        self.model = SegformerForSemanticSegmentation.from_pretrained(
+            model_name,
+            num_labels=num_classes,
+            num_channels=3, # Wymuszamy 3 kanały (standard ImageNet)
+            ignore_mismatched_sizes=True
+        )
+        
+    def forward(self, x):
+        # 1. Konwersja MRI (1 kanał) -> RGB (3 kanały) poprzez powielenie
+        # x shape: [Batch, 1, 512, 512] -> [Batch, 3, 512, 512]
+        x = x.repeat(1, 3, 1, 1)
+        
+        # 2. Przejście przez model HuggingFace
+        outputs = self.model(pixel_values=x)
+        
+        # 3. Upsampling (SegFormer zwraca wyjście 4x mniejsze, np. 128x128)
+        # Musimy je powiększyć z powrotem do 512x512
+        logits = nn.functional.interpolate(
+            outputs.logits, 
+            size=(512, 512), 
+            mode="bilinear", 
+            align_corners=False
+        )
+        
+        return logits    
+    
+
+class HuggingFaceSwinUperNet(nn.Module):
+    def __init__(self, num_classes=4, model_name="openmmlab/upernet-swin-tiny"):
+        super().__init__()
+        # UperNet to 'głowa' segmentacyjna, która często używa Swina jako backbone
+        self.model = UperNetForSemanticSegmentation.from_pretrained(
+            model_name,
+            num_labels=num_classes,
+            ignore_mismatched_sizes=True
+        )
+        
+    def forward(self, x):
+        # x: [Batch, 1, 512, 512] -> [Batch, 3, 512, 512]
+        x = x.repeat(1, 3, 1, 1)
+        
+        # Swin/UperNet w HF zwraca logits
+        outputs = self.model(pixel_values=x)
+        
+        # Upsampling do oryginalnego rozmiaru (512x512)
+        logits = nn.functional.interpolate(
+            outputs.logits, 
+            size=(512, 512), 
+            mode="bilinear", 
+            align_corners=False
+        )
+        return logits
+
+# --- 2. Wrapper dla BEiT ---
+class HuggingFaceBeit(nn.Module):
+    def __init__(self, num_classes=4, model_name="microsoft/beit-base-finetuned-ade-640-640"):
+        super().__init__()
+        self.model = BeitForSemanticSegmentation.from_pretrained(
+            model_name,
+            num_labels=num_classes,
+            ignore_mismatched_sizes=True
+        )
+        
+    def forward(self, x):
+        # 1. Konwersja MRI (1 kanał) -> RGB (3 kanały)
+        x = x.repeat(1, 3, 1, 1)
+        
+        # 2. POPRAWKA: Resize do 640x640 (Wymóg tego konkretnego modelu BEiT)
+        # Jeśli wejście ma inny rozmiar niż 640x640, skalujemy je w górę
+        if x.shape[2] != 640 or x.shape[3] != 640:
+            x = nn.functional.interpolate(
+                x, 
+                size=(640, 640), 
+                mode='bilinear', 
+                align_corners=False
+            )
+        
+        # 3. Przejście przez model
+        outputs = self.model(pixel_values=x)
+        
+        # 4. Skalowanie wyniku z powrotem do 512x512 (żeby pasował do masek Ground Truth)
+        logits = nn.functional.interpolate(
+            outputs.logits, 
+            size=(512, 512), 
+            mode="bilinear", 
+            align_corners=False
+        )
+        return logits
