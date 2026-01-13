@@ -12,7 +12,7 @@ def load_data():
 
     samples_img = []
     samples_mask = []
-    type = []
+    types = []
 
     des_size = (512, 512)
 
@@ -37,10 +37,15 @@ def load_data():
             full_mask_path = os.path.join(path_1_masks, mask)
 
             try:
-                img, mask = load_img_and_mask(full_image_path, full_mask_path, des_size, type=1)
-                samples_img.append(img)
-                samples_mask.append(mask)
-                type.append(1)
+                imgs, masks = load_img_and_mask(full_image_path, full_mask_path, des_size, type=1)
+                
+                samples_img.append(imgs)
+                samples_mask.append(masks)
+
+                # for img, mask in zip(imgs, masks):
+                #     samples_img.append(img)
+                #     samples_mask.append(mask)
+                types.append([1 for _ in range(len(imgs))])
 
     
             except Exception as e:
@@ -56,19 +61,21 @@ def load_data():
 
             full_image_path = os.path.join(full_path, f"{el}_sagittal_image.nii.gz")
             full_mask_path = os.path.join(full_path, f"{el}_sagittal_label.nii.gz")
-            type.append(2)
-
+    
             try:
-                img, mask = load_img_and_mask(full_image_path, full_mask_path, des_size, type=2)
-
-                samples_img.append(img)
-                samples_mask.append(mask)
+                imgs, masks = load_img_and_mask(full_image_path, full_mask_path, des_size, type=2)
+                samples_img.append(imgs)
+                samples_mask.append(masks)               
+                # for img, mask in zip(imgs, masks):
+                #     samples_img.append(img)
+                #     samples_mask.append(mask)
+                types.append([2 for _ in range(len(imgs))])
                     
             except Exception as e:
                 print(e)
                 print("couldn't load ", full_image_path, " or ", full_mask_path) 
 
-    return samples_img, samples_mask, type
+    return samples_img, samples_mask, types
 
 def split_data(imgs, masks, types ,train_frac=0.7, val_frac=0.2, seed=42):
 
@@ -94,16 +101,25 @@ def split_data(imgs, masks, types ,train_frac=0.7, val_frac=0.2, seed=42):
     test_idx = indices[train_len + val_len:]
 
     train_imgs = [imgs[i] for i in train_idx]
+    train_imgs = [el for sub_list in train_imgs for el in sub_list]
     train_masks = [masks[i] for i in train_idx]
+    train_masks = [el for sub_list in train_masks for el in sub_list]
     train_types = [types[i] for i in train_idx]
+    train_types = [el for sub_list in train_types for el in sub_list]
 
     val_imgs = [imgs[i] for i in val_idx]
+    val_imgs = [el for sub_list in val_imgs for el in sub_list]
     val_masks = [masks[i] for i in val_idx]
+    val_masks = [el for sub_list in val_masks for el in sub_list]
     val_types = [types[i] for i in val_idx]
+    val_types = [el for sub_list in val_types for el in sub_list]
 
     test_imgs = [imgs[i] for i in test_idx]
+    test_imgs = [el for sub_list in test_imgs for el in sub_list]
     test_masks = [masks[i] for i in test_idx]
+    test_masks = [el for sub_list in test_masks for el in sub_list]
     test_types = [types[i] for i in test_idx]
+    test_types = [el for sub_list in test_types for el in sub_list]
 
     return train_imgs, train_masks, train_types, val_imgs, val_masks, val_types, test_imgs, test_masks, test_types
 
@@ -131,7 +147,7 @@ def resize_with_pad(image, target_size, interpolation):
     canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized_image
     
     return canvas
-def map_labels(mask):
+def map_labels(mask, type):
     """
     Mapuje surowe etykiety (instance labels) na klasy semantyczne zgodne z artykułem.
     Docelowo:
@@ -141,59 +157,60 @@ def map_labels(mask):
     3 - Kość krzyżowa (Sacrum) -> z numeru 100 (zgaduję, że to 100, bo odstaje)
     """
     new_mask = np.zeros_like(mask)
-    
-    # 1. Mapowanie Kręgów (Vertebrae) -> Klasa 1
-    # Zakładam, że kręgi to wartości powyżej 200 (widzę 201-208 w Twoich logach)
-    new_mask[mask >= 200] = 3#1
-    
-    # 2. Mapowanie Dysków (Discs) -> Klasa 2
-    # Zakładam, że dyski to małe numery (widzę 1-8 w Twoich logach)
-    # Zazwyczaj dyski są numerowane sekwencyjnie.
-    new_mask[(mask >= 1) & (mask < 100)] = 1#2
-    
-    # 3. Mapowanie Kości Krzyżowej (Sacrum) -> Klasa 3
-    # W logach widzę "100". Często okrągłe liczby oznaczają inne struktury.
-    # Jeśli Sacrum to nie 100, to prawdopodobnie jeden z tych > 200.
-    # Ale spróbujmy tak:
-    new_mask[mask == 100] = 2#3
-    
+    if type==1:
+        # 1. Mapowanie Kręgów (Vertebrae) -> Klasa 1
+        # Zakładam, że kręgi to wartości powyżej 200 (widzę 201-208 w Twoich logach)
+        new_mask[mask >= 200] = 2
+        
+        # 2. Mapowanie Dysków (Discs) -> Klasa 2
+        # Zakładam, że dyski to małe numery (widzę 1-8 w Twoich logach)
+        # Zazwyczaj dyski są numerowane sekwencyjnie.
+        new_mask[(mask >= 1) & (mask < 100)] = 1
+        
+
+    elif type==2:
+        new_mask[mask == 3] = 2
+        new_mask[mask == 1] = 1
     return new_mask
 
 def load_img_and_mask(img_path, mask_path, des_size, type):
+
+    imgs = []
+    masks = []
+
     # Wczytanie
     img_itk = sitk.ReadImage(img_path)
     img_itk = sitk.DICOMOrient(img_itk, "RAS")
-    img = sitk.GetArrayFromImage(img_itk)
+    img_3d = sitk.GetArrayFromImage(img_itk)
 
     mask_itk = sitk.ReadImage(mask_path)
     mask_itk = sitk.DICOMOrient(mask_itk, "RAS")
-    mask = sitk.GetArrayFromImage(mask_itk)
+    mask_3d = sitk.GetArrayFromImage(mask_itk)
 
-    # Wybór płaszczyzny Sagittal
-    if img.ndim == 3:
+    for sagittal_slice_idx in range(img_3d.shape[2]):
         # Zakładam, że oś X (indeks 2) to płaszczyzna strzałkowa w RAS
-        sagittal_slice_idx = img.shape[2] // 2
-        img = img[:, :, sagittal_slice_idx]
-        mask = mask[:, :, sagittal_slice_idx]
+        
+        img = img_3d[:, :, sagittal_slice_idx]
+        mask = mask_3d[:, :, sagittal_slice_idx]
         
         # Obrót, żeby głowa była u góry
         img = np.flipud(img)
         mask = np.flipud(mask)
 
-    # Resize z paddingiem (zachowanie proporcji)
-    img = resize_with_pad(img, des_size, interpolation=cv2.INTER_LINEAR)
-    mask = resize_with_pad(mask, des_size, interpolation=cv2.INTER_NEAREST)
+        # Resize z paddingiem (zachowanie proporcji)
+        img = resize_with_pad(img, des_size, interpolation=cv2.INTER_LINEAR)
+        mask = resize_with_pad(mask, des_size, interpolation=cv2.INTER_NEAREST)
 
-    # --- NOWOŚĆ: MAPOWANIE KLAS ---
-    # Musimy to zrobić przed konwersją na typy danych
-    if type == 1:
-        mask = map_labels(mask)
+        mask = map_labels(mask, type)
+        
+        # Preprocessing
+        img = standardize(img)
+        mask = mask.astype(np.int64)
 
-    # Preprocessing
-    img = standardize(img)
-    mask = mask.astype(np.int64)
+        imgs.append(img)
+        masks.append(mask)
 
-    return img, mask
+    return imgs, masks
 
 # Twoja funkcja standardize (bez zmian, jest OK)
 def standardize(img, eps=1e-8):
@@ -224,7 +241,7 @@ class spine_dataset(Dataset):
         
         if self.train:
             transform = A.Compose([
-                            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=1.0),
+                            A.Affine(scale=(0.9, 1.1), translate_percent=(-0.05, 0.05), rotate=(-15, 15), p=0.9),
                             A.GaussNoise(p=0.2),
                             A.ElasticTransform(alpha=1, sigma=50, p=0.3)
             ], additional_targets={'mask': 'mask'})
@@ -243,6 +260,7 @@ class spine_dataset(Dataset):
         # UWAGA: Nie dodajemy unsqueeze(0)! CrossEntropyLoss chce (Batch, H, W) a nie (Batch, 1, H, W)
         y = torch.from_numpy(mask).long()
         
+
         return X, y
 
     def visualize(self, idx):
