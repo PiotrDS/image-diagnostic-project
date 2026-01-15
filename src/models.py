@@ -5,51 +5,26 @@ from transformers import SegformerForSemanticSegmentation, UperNetForSemanticSeg
 
 class HybridLoss(nn.Module):
     """
-    Implementacja wzoru (5) z artykułu: Hybrid Loss (Cross Entropy + Dice Loss).
     DCL(Q, F) = CrossEntropy + (1 - DiceScore)
     """
     def __init__(self, smooth=1e-6):
         super(HybridLoss, self).__init__()
         self.smooth = smooth
-        # Używamy standardowej CrossEntropy, która w PyTorch jest bardzo stabilna
         self.ce = nn.CrossEntropyLoss()
 
     def forward(self, logits, targets):
-        """
-        logits: Wyjście z modelu (surowe, bez softmax) [Batch, Classes, H, W]
-        targets: Prawdziwe maski (indeksy klas) [Batch, H, W]
-        """
-        
-        # 1. Obliczenie Cross Entropy Loss
-        # PyTorchowa funkcja CrossEntropyLoss oczekuje logits i targets jako long
         ce_loss = self.ce(logits, targets)
-        
-        # 2. Obliczenie Dice Loss (zgodnie z drugą częścią wzoru)
-        # Musimy zamienić logits na prawdopodobieństwa (Softmax)
         probs = torch.softmax(logits, dim=1)
-        
-        # Musimy zamienić targets na One-Hot Encoding, żeby pasowały kształtem do probs
-        # targets: [B, H, W] -> [B, C, H, W]
+
         num_classes = logits.shape[1]
         targets_one_hot = F.one_hot(targets, num_classes=num_classes).permute(0, 3, 1, 2).float()
-        
-        # Wzór z obrazka używa kwadratów w mianowniku: (y^2 + p^2)
-        # Intersection (licznik): 2 * y * p
+
         intersection = 2.0 * (probs * targets_one_hot).sum(dim=(2, 3))
-        
-        # Union (mianownik): y^2 + p^2
-        # Dla targets (0 lub 1) kwadrat nic nie zmienia, ale dla probs tak.
         denominator = (probs ** 2).sum(dim=(2, 3)) + (targets_one_hot ** 2).sum(dim=(2, 3))
         
-        # Dice Score dla każdej klasy w każdym obrazie
         dice_score = (intersection + self.smooth) / (denominator + self.smooth)
-        
-        # Dice Loss to 1 - Dice Score (bo chcemy minimalizować stratę)
-        # Uśredniamy po klasach i po batchu
         dice_loss = 1.0 - dice_score.mean()
-        
-        # Wynikowa strata to suma obu (wzór ma minus przed całą sumą, co w optymalizacji
-        # oznacza minimalizację sumy strat składowych).
+    
         return ce_loss + dice_loss
 
 class ResidualBlock(nn.Module):
@@ -173,11 +148,10 @@ class ImprovedAttentionUNet(nn.Module):
 class HuggingFaceSegFormer(nn.Module):
     def __init__(self, num_classes=4, model_name="nvidia/mit-b0"):
         super().__init__()
-        # Pobieramy pretrenowany model (np. mit-b0 to wersja najlżejsza)
         self.model = SegformerForSemanticSegmentation.from_pretrained(
             model_name,
             num_labels=num_classes,
-            num_channels=3, # Wymuszamy 3 kanały (standard ImageNet)
+            num_channels=3, 
             ignore_mismatched_sizes=True
         )
         
@@ -186,7 +160,7 @@ class HuggingFaceSegFormer(nn.Module):
         # x shape: [Batch, 1, 512, 512] -> [Batch, 3, 512, 512]
         x = x.repeat(1, 3, 1, 1)
         
-        # 2. Przejście przez model HuggingFace
+        
         outputs = self.model(pixel_values=x)
         
         # 3. Upsampling (SegFormer zwraca wyjście 4x mniejsze, np. 128x128)
@@ -226,41 +200,3 @@ class HuggingFaceSwinUperNet(nn.Module):
             align_corners=False
         )
         return logits
-
-# --- 2. Wrapper dla BEiT ---
-class HuggingFaceBeit(nn.Module):
-    def __init__(self, num_classes=4, model_name="microsoft/beit-base-finetuned-ade-640-640"):
-        super().__init__()
-        self.model = BeitForSemanticSegmentation.from_pretrained(
-            model_name,
-            num_labels=num_classes,
-            ignore_mismatched_sizes=True
-        )
-        
-    def forward(self, x):
-        # 1. Konwersja MRI (1 kanał) -> RGB (3 kanały)
-        x = x.repeat(1, 3, 1, 1)
-        
-        # 2. POPRAWKA: Resize do 640x640 (Wymóg tego konkretnego modelu BEiT)
-        # Jeśli wejście ma inny rozmiar niż 640x640, skalujemy je w górę
-        if x.shape[2] != 640 or x.shape[3] != 640:
-            x = nn.functional.interpolate(
-                x, 
-                size=(640, 640), 
-                mode='bilinear', 
-                align_corners=False
-            )
-        
-        # 3. Przejście przez model
-        outputs = self.model(pixel_values=x)
-        
-        # 4. Skalowanie wyniku z powrotem do 512x512 (żeby pasował do masek Ground Truth)
-        logits = nn.functional.interpolate(
-            outputs.logits, 
-            size=(512, 512), 
-            mode="bilinear", 
-            align_corners=False
-        )
-        return logits
-    
-
