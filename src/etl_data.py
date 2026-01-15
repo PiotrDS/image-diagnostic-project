@@ -8,6 +8,45 @@ import cv2
 import albumentations as A
 from torch.utils.data import random_split
 
+def load_test_data():
+
+
+    images = []
+
+    des_size = (512,512)
+
+    path_images = f"..{os.sep}data{os.sep}data_3"
+    
+    if os.path.exists(path_images):
+        for path1 in sorted(os.listdir(path_images)):
+            new_path = path_images + os.sep + path1
+            if os.path.isdir(new_path):
+                for path2 in sorted(os.listdir(new_path)):
+                    next_path = new_path+os.sep+path2
+                    if os.path.isdir(next_path):
+                        for path3 in sorted(os.listdir(next_path)):
+                            if path3.startswith("T1_TSE_SAG"):
+                                next_next_path = next_path + os.sep + path3
+                                for path4 in sorted(os.listdir(next_next_path)):
+                                    if path4.endswith(("002.ima","005.ima","007.ima","010.ima")):
+                                        final_path = next_next_path + os.sep + path4
+
+                                        img_itk = sitk.ReadImage(final_path)
+                                        img_itk = sitk.DICOMOrient(img_itk, "RAS")
+                                        img_3d = sitk.GetArrayFromImage(img_itk)
+                                        img = img_3d[:,:,0]
+
+                                        img = np.flipud(img)
+
+
+                                        img = resize_with_pad(img, des_size, interpolation=cv2.INTER_LINEAR)
+
+                                        img = standardize(img)
+                                        
+                                        images.append(img)
+    return images
+
+
 def load_data():
 
     samples_img = []
@@ -268,7 +307,7 @@ class spine_dataset(Dataset):
         mask = self.samples_mask[idx]
         type = self.types[idx]
 
-        print(f"Klasy w masce: {np.unique(mask)}, typ obserwacji: {type}") # Debugowanie
+        print(f"Number of unique class in mask: {np.unique(mask)}, source type: {type}") 
 
         fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
@@ -282,3 +321,17 @@ class spine_dataset(Dataset):
         axes[1].axis('off')
 
         plt.show()
+
+
+class spine_test_dataset(Dataset):
+
+    def __init__(self, imgs):
+        self.imgs = imgs
+
+    def __len__(self):
+        return(len(self.imgs))
+    
+    def __getitem__(self, idx):
+        img = self.imgs[idx]
+        X = torch.from_numpy(img).unsqueeze(0).float()
+        return X
