@@ -10,7 +10,6 @@ from torch.utils.data import random_split
 
 def load_test_data():
 
-
     images = []
 
     des_size = (512,512)
@@ -55,7 +54,7 @@ def load_data():
 
     des_size = (512, 512)
 
-    # --- Wczytywanie DATA 1 ---
+    # load first dataset
     path_1_images = f"..{os.sep}data{os.sep}data_1{os.sep}images"
     path_1_masks = f"..{os.sep}data{os.sep}data_1{os.sep}masks"
 
@@ -81,9 +80,6 @@ def load_data():
                 samples_img.append(imgs)
                 samples_mask.append(masks)
 
-                # for img, mask in zip(imgs, masks):
-                #     samples_img.append(img)
-                #     samples_mask.append(mask)
                 types.append([1 for _ in range(len(imgs))])
 
     
@@ -91,7 +87,7 @@ def load_data():
                 print(e)
                 print("couldn't load ", full_image_path, " or ", full_mask_path)
             
-        # --- Wczytywanie DATA 2 ---
+        # # load second dataset
         
     path_2 = f"..{os.sep}data{os.sep}data_2"
     if os.path.exists(path_2):
@@ -105,9 +101,7 @@ def load_data():
                 imgs, masks = load_img_and_mask(full_image_path, full_mask_path, des_size, type=2)
                 samples_img.append(imgs)
                 samples_mask.append(masks)               
-                # for img, mask in zip(imgs, masks):
-                #     samples_img.append(img)
-                #     samples_mask.append(mask)
+
                 types.append([2 for _ in range(len(imgs))])
                     
             except Exception as e:
@@ -163,10 +157,7 @@ def split_data(imgs, masks, types ,train_frac=0.7, val_frac=0.2, seed=42):
     return train_imgs, train_masks, train_types, val_imgs, val_masks, val_types, test_imgs, test_masks, test_types
 
 def resize_with_pad(image, target_size, interpolation):
-    """
-    Skaluje obraz zachowując proporcje i dodaje padding (czarne pasy),
-    aby wynikowy obraz miał wymiar target_size (H, W).
-    """
+
     h, w = image.shape
     target_h, target_w = target_size
     
@@ -176,10 +167,8 @@ def resize_with_pad(image, target_size, interpolation):
     
     resized_image = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
     
-    # Tworzenie nowego płótna
     canvas = np.zeros((target_h, target_w), dtype=image.dtype)
     
-    # Wyliczanie pozycji wklejenia (centrowanie)
     y_offset = (target_h - new_h) // 2
     x_offset = (target_w - new_w) // 2
     
@@ -188,28 +177,32 @@ def resize_with_pad(image, target_size, interpolation):
     return canvas
 def map_labels(mask, type):
     """
-    Mapuje surowe etykiety (instance labels) na klasy semantyczne zgodne z artykułem.
-    Docelowo:
-    0 - Tło
-    1 - Kręgi (Vertebrae) -> z numerów > 200
-    2 - Dyski (Discs) -> z numerów 1-19
-    3 - Kość krzyżowa (Sacrum) -> z numeru 100 (zgaduję, że to 100, bo odstaje)
+    Maps raw labels to semantic classes.
+    Target mapping:
+    Background: stays at 0
+    Vertebrae: from labels greater than 200 -> 1
+    Discs: from labels 1 to 19 -> 2
+    Sacrum: from label 100 -> 0 (to background)
     """
+
     new_mask = np.zeros_like(mask)
     if type==1:
-        # 1. Mapowanie Kręgów (Vertebrae) -> Klasa 1
-        # Zakładam, że kręgi to wartości powyżej 200 (widzę 201-208 w Twoich logach)
-        new_mask[mask >= 200] = 2
-        
-        # 2. Mapowanie Dysków (Discs) -> Klasa 2
-        # Zakładam, że dyski to małe numery (widzę 1-8 w Twoich logach)
-        # Zazwyczaj dyski są numerowane sekwencyjnie.
+
+        # 1. Map: Vertebrae -> Class 1
         new_mask[(mask >= 1) & (mask < 100)] = 1
+        
+        # 2. Map: Discs -> Class 2
+        new_mask[mask >= 200] = 2
         
 
     elif type==2:
-        new_mask[mask == 3] = 2
+
+        # 1. Map: Vertebrae -> Class 1
         new_mask[mask == 1] = 1
+
+        # 2. Map: Discs -> Class 2
+        new_mask[mask == 3] = 2
+
     return new_mask
 
 def load_img_and_mask(img_path, mask_path, des_size, type):
@@ -217,7 +210,7 @@ def load_img_and_mask(img_path, mask_path, des_size, type):
     imgs = []
     masks = []
 
-    # Wczytanie
+    # Load dicom files
     img_itk = sitk.ReadImage(img_path)
     img_itk = sitk.DICOMOrient(img_itk, "RAS")
     img_3d = sitk.GetArrayFromImage(img_itk)
@@ -227,22 +220,18 @@ def load_img_and_mask(img_path, mask_path, des_size, type):
     mask_3d = sitk.GetArrayFromImage(mask_itk)
 
     for sagittal_slice_idx in range(img_3d.shape[2]):
-        # Zakładam, że oś X (indeks 2) to płaszczyzna strzałkowa w RAS
         
         img = img_3d[:, :, sagittal_slice_idx]
         mask = mask_3d[:, :, sagittal_slice_idx]
         
-        # Obrót, żeby głowa była u góry
         img = np.flipud(img)
         mask = np.flipud(mask)
 
-        # Resize z paddingiem (zachowanie proporcji)
         img = resize_with_pad(img, des_size, interpolation=cv2.INTER_LINEAR)
         mask = resize_with_pad(mask, des_size, interpolation=cv2.INTER_NEAREST)
 
         mask = map_labels(mask, type)
         
-        # Preprocessing
         img = standardize(img)
         mask = mask.astype(np.int64)
 
@@ -251,9 +240,9 @@ def load_img_and_mask(img_path, mask_path, des_size, type):
 
     return imgs, masks
 
-# Twoja funkcja standardize (bez zmian, jest OK)
+
 def standardize(img, eps=1e-8):
-    if img.max() == 0: return img # Zabezpieczenie przed pustym obrazem
+    if img.max() == 0: return img 
     pixels = img[img > 0]
     if pixels.size == 0: return img
     
@@ -292,11 +281,10 @@ class spine_dataset(Dataset):
             except Exception as e:
                 pass # if augmentation fail just process with original image and mask
 
-        # Obraz: (H, W) -> (1, H, W), float32
+        # Image: (H, W) -> (1, H, W), float32
         X = torch.from_numpy(img).unsqueeze(0).float()
         
-        # Maska: (H, W), int64 (Long). 
-        # UWAGA: Nie dodajemy unsqueeze(0)! CrossEntropyLoss chce (Batch, H, W) a nie (Batch, 1, H, W)
+        # Mask: (H, W), int64 (Long). 
         y = torch.from_numpy(mask).long()
         
 
@@ -315,7 +303,6 @@ class spine_dataset(Dataset):
         axes[0].set_title('Image')
         axes[0].axis('off')
 
-        # maska - wyświetlamy z kolorami dla klas
         axes[1].imshow(mask, cmap='jet', vmin=0, vmax=3)
         axes[1].set_title('Mask')
         axes[1].axis('off')
