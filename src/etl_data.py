@@ -58,18 +58,17 @@ def load_data():
     path_1_images = f"..{os.sep}data{os.sep}data_1{os.sep}images"
     path_1_masks = f"..{os.sep}data{os.sep}data_1{os.sep}masks"
 
-    seen = []
+    
 
-    if os.path.exists(path_1_images):
+    if not(os.path.exists(path_1_images)):
         for image, mask in zip(sorted(os.listdir(path_1_images)), sorted(os.listdir(path_1_masks))):
 
             image_number = image.split('_')[0]
 
             
-            if image_number in seen:
+            if not(image.endswith("t2.mha")):
                 continue
                 
-            seen.append(image_number)
 
             full_image_path = os.path.join(path_1_images, image)
             full_mask_path = os.path.join(path_1_masks, mask)
