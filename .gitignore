@@ -1,5 +1,7 @@
 # ignore data folder
 data/
 .vscode/
+test/
 
 __pycache__
+
